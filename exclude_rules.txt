@@ -1,0 +1,37 @@
+# Path-based exclusion rules for disk_dedup.
+# One pattern per line, matched case-insensitively against each file's path
+# relative to the drive root (with '/' separators). '#' starts a comment.
+#
+# - "Folder/**"  excludes that folder and everything below it.
+# - "Users/*/AppData/**" excludes AppData under every user profile.
+# - A pattern with no '/' matches that filename anywhere on the drive.
+#
+# Review/edit this before a real "copy" run on each drive -- installed
+# software and folder layout differs machine to machine. Run "scan" first
+# and check the report before trusting these defaults.
+
+Windows/**
+Program Files/**
+Program Files (x86)/**
+ProgramData/**
+$Recycle.Bin/**
+System Volume Information/**
+Recovery/**
+PerfLogs/**
+Config.Msi/**
+Windows.old/**
+$WINDOWS.~BT/**
+$WINDOWS.~WS/**
+Users/*/AppData/**
+Users/*/NTUSER.DAT*
+Users/Default/**
+Users/Public/**
+Users/All Users/**
+pagefile.sys
+hiberfil.sys
+swapfile.sys
+bootmgr
+bootmgr.efi
+desktop.ini
+Thumbs.db
+ntuser.dat*

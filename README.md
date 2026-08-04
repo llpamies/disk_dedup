@@ -1,0 +1,88 @@
+# disk_dedup
+
+Extract a single, deduplicated collection of user files out of several old
+HDDs that mix Windows system files with personal data — without needing all
+the drives plugged in at once.
+
+- **Read-only on the sources.** Nothing on the HDDs is ever modified or deleted.
+- **Cross-drive dedup by content (SHA-256).** A `catalog.db` in the destination
+  folder remembers every file hash seen so far, so plugging in drive 4 next
+  week still correctly skips anything already copied from drive 1.
+- **System files stripped by path rules**, not copied at all (see
+  `exclude_rules.txt`).
+- **Merged output tree.** Files from every drive land in one unified folder
+  structure (`dest/Users/John/Documents/...`), not one subtree per drive.
+- **Version-safe.** If the same path shows up with *different* content on two
+  drives (e.g. a document edited between backups), both are kept, disambiguated
+  as `Resume_v1.docx` / `Resume_v2.docx`.
+
+## Requirements
+
+Python 3.9+, standard library only — nothing to `pip install` to run the tool
+itself (`pytest` is only needed to run the test suite).
+
+## Usage
+
+Process each of the 5 drives in turn, one at a time:
+
+```bash
+# 1. Dry run: classify files, no hashing or copying yet.
+python dedup.py scan /mnt/hdd1 --label HDD1 --dest /mnt/collection
+
+# Review the printed report -- especially the "skipped entirely" directory
+# list and the top-level folder breakdown. If something that should be user
+# data got excluded (or vice versa), edit exclude_rules.txt and re-run scan;
+# it's safe to repeat.
+
+# 2. Hash, dedupe, and copy the unique files.
+python dedup.py copy /mnt/hdd1 --label HDD1 --dest /mnt/collection
+
+# 3. Unplug HDD1, plug in HDD2, repeat with --label HDD2, etc.
+python dedup.py scan /mnt/hdd2 --label HDD2 --dest /mnt/collection
+python dedup.py copy /mnt/hdd2 --label HDD2 --dest /mnt/collection
+```
+
+At any point:
+
+```bash
+python dedup.py report --dest /mnt/collection            # all drives so far
+python dedup.py report --dest /mnt/collection --drive HDD2
+```
+
+### Resuming an interrupted run
+
+`scan` and `copy` are both safe to re-run on the same drive/label. Files
+already fully processed (excluded, copied as unique, or marked duplicate) are
+left untouched; only files that changed size/mtime since the last scan, or
+that were never finished, are reprocessed.
+
+### Tuning what counts as "system files"
+
+`exclude_rules.txt` is a plain list of path patterns (see the comments at the
+top of that file for the syntax). Installed software and folder layout vary
+machine to machine, so it's worth reviewing the `scan` report per drive —
+pass a drive-specific copy with `--rules some_other_rules.txt` if one drive
+needs different treatment.
+
+### Same file, different content across drives
+
+Dedup is by content hash, not by name — a file appearing at the same path on
+two drives with *different* hashes is not treated as a duplicate collision
+(it's almost always a different snapshot/version from a different backup
+date). Both are kept, suffixed `_v1`, `_v2`, etc. `report` prints a "possible
+versions" section listing every such case so you can review and decide
+whether to prune manually.
+
+### True duplicates and which copy is kept
+
+When the exact same content is found again, only one copy is kept, and the
+canonical file's modified-time is adjusted to match whichever occurrence was
+older — the earliest, "most original" copy wins even if a later drive happens
+to be processed first.
+
+## Development
+
+```bash
+pip install pytest
+python3 -m pytest
+```
