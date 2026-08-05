@@ -49,6 +49,16 @@ python dedup.py report --dest /mnt/collection            # all drives so far
 python dedup.py report --dest /mnt/collection --drive HDD2
 ```
 
+### Progress
+
+Both `scan` and `copy` print a live progress line to stderr while running.
+`copy` knows the file count/bytes upfront, so it's a real `N/M (x%)` bar with
+bytes copied. `scan` doesn't know the total ahead of time without a wasted
+extra pass over the drive, so it shows a running counter instead (files
+seen, candidate/excluded tallies, current path). In a real terminal the line
+updates in place; redirected to a file/log it prints periodic snapshots
+instead. Pass `--quiet` to either command to suppress it.
+
 ### Resuming an interrupted run
 
 `scan` and `copy` are both safe to re-run on the same drive/label. Files

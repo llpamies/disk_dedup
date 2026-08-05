@@ -48,7 +48,7 @@ def cmd_scan(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Scanning {source} as drive {args.label!r} (rules: {rules_path})...")
-    scanner.scan_drive(conn, drive_id, source, rules)
+    scanner.scan_drive(conn, drive_id, source, rules, show_progress=not args.quiet)
     report.print_drive_report(conn, args.label, phase="scan")
     print("\nReview the counts above. If exclusions look wrong, edit the rules "
           "file and re-run scan (it's safe to repeat) before running 'copy'.")
@@ -70,7 +70,7 @@ def cmd_copy(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Copying unique files from drive {args.label!r} into {dest}...")
-    hasher.copy_drive(conn, drive_id, source, dest)
+    hasher.copy_drive(conn, drive_id, source, dest, show_progress=not args.quiet)
     report.print_drive_report(conn, args.label, phase="copy")
     return 0
 
@@ -99,12 +99,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_scan.add_argument("--label", required=True, help="Short name identifying this drive, e.g. HDD1.")
     p_scan.add_argument("--dest", required=True, help="Destination collection folder (holds catalog.db).")
     p_scan.add_argument("--rules", default=str(DEFAULT_RULES), help="Path to exclude_rules.txt.")
+    p_scan.add_argument("--quiet", action="store_true", help="Suppress the live progress line.")
     p_scan.set_defaults(func=cmd_scan)
 
     p_copy = sub.add_parser("copy", help="Hash pending candidates, dedupe, and copy unique files.")
     p_copy.add_argument("source", help="Path to the mounted drive/folder previously scanned.")
     p_copy.add_argument("--label", required=True, help="Same --label used for 'scan'.")
     p_copy.add_argument("--dest", required=True, help="Destination collection folder.")
+    p_copy.add_argument("--quiet", action="store_true", help="Suppress the live progress bar.")
     p_copy.set_defaults(func=cmd_copy)
 
     p_report = sub.add_parser("report", help="Print scan/copy summary from the catalog.")

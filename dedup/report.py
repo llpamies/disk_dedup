@@ -7,6 +7,7 @@ from collections import defaultdict
 from typing import Optional
 
 from . import catalog
+from .progress import human_size
 
 STATUS_LABELS = {
     "pending": "pending (not yet hashed)",
@@ -16,15 +17,6 @@ STATUS_LABELS = {
     "duplicate": "duplicates skipped",
     "error": "unreadable / errored",
 }
-
-
-def human_size(n: int) -> str:
-    size = float(n)
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if size < 1024 or unit == "TB":
-            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} {unit}"
-        size /= 1024
-    return f"{size:.1f} TB"
 
 
 def print_status_summary(conn: sqlite3.Connection, drive_id: Optional[int] = None, title: str = "Summary") -> None:

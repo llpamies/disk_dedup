@@ -7,6 +7,7 @@ import sqlite3
 from pathlib import Path
 
 from . import catalog
+from .progress import Progress
 from .rules import RuleSet
 
 
@@ -14,8 +15,15 @@ def _to_rel_posix(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
 
 
-def scan_drive(conn: sqlite3.Connection, drive_id: int, source_root: Path, rules: RuleSet) -> None:
+def scan_drive(
+    conn: sqlite3.Connection,
+    drive_id: int,
+    source_root: Path,
+    rules: RuleSet,
+    show_progress: bool = True,
+) -> None:
     catalog.mark_scan_started(conn, drive_id)
+    progress = Progress("Scan", total=None, enabled=show_progress)
 
     for dirpath, dirnames, filenames in os.walk(source_root, followlinks=False):
         cur_dir = Path(dirpath)
@@ -43,6 +51,7 @@ def scan_drive(conn: sqlite3.Connection, drive_id: int, source_root: Path, rules
 
             if rules.is_excluded(rel_path):
                 catalog.upsert_scanned_file(conn, drive_id, rel_path, None, None, excluded=True)
+                progress.advance(current=rel_path, excluded=1)
                 continue
 
             try:
@@ -52,10 +61,13 @@ def scan_drive(conn: sqlite3.Connection, drive_id: int, source_root: Path, rules
                 # so the drive-level report accounts for it; copy phase will
                 # re-attempt and log the real error.
                 catalog.upsert_scanned_file(conn, drive_id, rel_path, None, None, excluded=False)
+                progress.advance(current=rel_path, candidate=1)
                 continue
 
             catalog.upsert_scanned_file(conn, drive_id, rel_path, st.st_size, st.st_mtime, excluded=False)
+            progress.advance(current=rel_path, candidate=1)
 
         conn.commit()
 
+    progress.finish()
     catalog.mark_scan_completed(conn, drive_id)
