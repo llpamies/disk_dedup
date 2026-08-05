@@ -83,6 +83,18 @@ def cmd_report(args: argparse.Namespace) -> int:
         return 1
 
     conn = catalog.connect(db_path)
+
+    drive_id = None
+    if args.drive:
+        drive_id = catalog.get_drive_id(conn, args.drive)
+        if drive_id is None:
+            print(f"error: no catalog data for drive {args.drive!r}.", file=sys.stderr)
+            return 1
+
+    if args.list_duplicates:
+        report.print_duplicate_list(conn, drive_id)
+        return 0
+
     if args.drive:
         report.print_drive_report(conn, args.drive, phase="copy")
     else:
@@ -112,6 +124,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_report = sub.add_parser("report", help="Print scan/copy summary from the catalog.")
     p_report.add_argument("--dest", required=True, help="Destination collection folder.")
     p_report.add_argument("--drive", default=None, help="Limit the report to one drive label.")
+    p_report.add_argument(
+        "--list-duplicates",
+        action="store_true",
+        help="Instead of the summary, print one source file path per line for every "
+        "duplicate that was skipped (not copied). Plain output, suitable for piping "
+        "or redirecting to a file. Works against an existing --dest with no re-scan/copy needed.",
+    )
     p_report.set_defaults(func=cmd_report)
 
     return parser

@@ -47,6 +47,13 @@ At any point:
 ```bash
 python dedup.py report --dest /mnt/collection            # all drives so far
 python dedup.py report --dest /mnt/collection --drive HDD2
+
+# Plain, one-path-per-line dump of source files skipped as duplicates
+# (not copied) -- reads straight from the existing catalog.db, no
+# re-scan/copy needed. Handy for piping/redirecting, e.g. to double check
+# before reclaiming space on a source drive.
+python dedup.py report --dest /mnt/collection --list-duplicates > dupes.txt
+python dedup.py report --dest /mnt/collection --list-duplicates --drive HDD2
 ```
 
 ### Progress

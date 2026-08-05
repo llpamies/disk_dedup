@@ -210,6 +210,32 @@ def iter_possible_versions(conn: sqlite3.Connection, drive_id: Optional[int] = N
     yield from conn.execute(query, params)
 
 
+def iter_duplicates(conn: sqlite3.Connection, drive_id: Optional[int] = None) -> Iterator[sqlite3.Row]:
+    """Files skipped as duplicates, with the drive they came from and the
+    canonical (kept) copy they matched."""
+    query = """
+        SELECT
+            f.rel_path AS rel_path,
+            f.sha256 AS sha256,
+            f.mtime AS mtime,
+            d.label AS drive_label,
+            d.source_root AS source_root,
+            c.dest_path AS canonical_dest_path,
+            cd.label AS canonical_drive_label
+        FROM files f
+        JOIN drives d ON d.id = f.drive_id
+        LEFT JOIN files c ON c.id = f.duplicate_of_id
+        LEFT JOIN drives cd ON cd.id = c.drive_id
+        WHERE f.status = 'duplicate'
+    """
+    params: tuple = ()
+    if drive_id is not None:
+        query += " AND f.drive_id = ?"
+        params = (drive_id,)
+    query += " ORDER BY d.label, f.rel_path"
+    yield from conn.execute(query, params)
+
+
 def summary_counts(conn: sqlite3.Connection, drive_id: Optional[int] = None) -> dict:
     query = "SELECT status, COUNT(*) AS n, COALESCE(SUM(size), 0) AS total_size FROM files"
     params: tuple = ()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import defaultdict
+from pathlib import Path
 from typing import Optional
 
 from . import catalog
@@ -85,6 +86,14 @@ def print_drive_report(conn: sqlite3.Connection, label: str, phase: str) -> None
         print_scan_breakdown(conn, drive_id)
     if phase == "copy":
         print_possible_versions(conn, drive_id)
+
+
+def print_duplicate_list(conn: sqlite3.Connection, drive_id: Optional[int] = None) -> None:
+    """Plain, one-path-per-line dump of duplicate (not copied) source files,
+    meant for piping/redirecting -- no headers or summary text."""
+    for row in catalog.iter_duplicates(conn, drive_id):
+        source_path = Path(row["source_root"]) / row["rel_path"]
+        print(source_path.as_posix())
 
 
 def print_cumulative_report(conn: sqlite3.Connection) -> None:

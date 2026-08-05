@@ -52,6 +52,37 @@ def test_find_canonical_by_hash_only_matches_unique_status(tmp_path):
     assert found["id"] == row["id"]
 
 
+def test_iter_duplicates_lists_skipped_files_with_source_and_canonical_info(tmp_path):
+    conn = catalog.connect(tmp_path / "cat.db")
+    d1 = catalog.get_or_create_drive(conn, "HDD1", "/mnt/hdd1")
+    d2 = catalog.get_or_create_drive(conn, "HDD2", "/mnt/hdd2")
+
+    catalog.upsert_scanned_file(conn, d1, "Users/John/vacation.jpg", 10, 100.0, excluded=False)
+    kept = conn.execute("SELECT * FROM files WHERE drive_id=? AND rel_path='Users/John/vacation.jpg'", (d1,)).fetchone()
+    catalog.mark_unique(conn, kept["id"], "same-hash", "Users/John/vacation.jpg")
+
+    catalog.upsert_scanned_file(conn, d2, "Users/John/vacation.jpg", 10, 150.0, excluded=False)
+    dup = conn.execute("SELECT * FROM files WHERE drive_id=? AND rel_path='Users/John/vacation.jpg'", (d2,)).fetchone()
+    catalog.mark_duplicate(conn, dup["id"], "same-hash", kept["id"])
+
+    # An unrelated unique file should never show up in the duplicate dump.
+    catalog.upsert_scanned_file(conn, d1, "Users/John/budget.xlsx", 5, 50.0, excluded=False)
+    other = conn.execute("SELECT * FROM files WHERE rel_path='Users/John/budget.xlsx'").fetchone()
+    catalog.mark_unique(conn, other["id"], "hash-c", "Users/John/budget.xlsx")
+
+    results = list(catalog.iter_duplicates(conn))
+    assert len(results) == 1
+    row = results[0]
+    assert row["rel_path"] == "Users/John/vacation.jpg"
+    assert row["drive_label"] == "HDD2"
+    assert row["source_root"] == "/mnt/hdd2"
+    assert row["canonical_dest_path"] == "Users/John/vacation.jpg"
+    assert row["canonical_drive_label"] == "HDD1"
+
+    assert list(catalog.iter_duplicates(conn, drive_id=d1)) == []
+    assert len(list(catalog.iter_duplicates(conn, drive_id=d2))) == 1
+
+
 def test_iter_possible_versions_flags_same_path_different_hash(tmp_path):
     conn = catalog.connect(tmp_path / "cat.db")
     d1 = catalog.get_or_create_drive(conn, "HDD1", "/mnt/hdd1")
