@@ -53,6 +53,16 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    try:
+        # The copy phase commits after every file; the default journal mode
+        # fsyncs the destination disk twice per commit, which stalls the whole
+        # pipeline. WAL+NORMAL batches syncs safely: a crash can lose only the
+        # last moments of catalog state, which the resume logic already
+        # handles (rows left pending/hashing are simply reprocessed).
+        conn.execute("PRAGMA journal_mode = WAL")
+        conn.execute("PRAGMA synchronous = NORMAL")
+    except sqlite3.OperationalError:
+        pass  # e.g. some network filesystems; the default mode still works
     conn.executescript(SCHEMA)
     return conn
 

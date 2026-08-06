@@ -56,26 +56,36 @@ python dedup.py report --dest /mnt/collection --list-duplicates > dupes.txt
 python dedup.py report --dest /mnt/collection --list-duplicates --drive HDD2
 ```
 
-### Parallel hashing
+### The copy pipeline
 
-If your source drive can deliver data faster than a single CPU core can run
-SHA-256 over it, hashing itself becomes the bottleneck rather than the disk.
-`copy` pipelines hash computation across a small thread pool (default: up to
-4 cores) while keeping disk reads strictly sequential in one thread -- only
-the CPU-bound hash step runs in parallel, so a spinning source HDD is never
-hit with concurrent reads of unrelated files (which would cause seek
-thrashing and likely make things slower, not faster). Tune it with
-`--hash-workers N`, or `--hash-workers 1` to fall back to fully sequential.
+`copy` runs as a three-stage pipeline so no single thread serializes the
+whole job:
 
-The worker count actually used is printed at the start of `copy` (e.g. "4
-hash worker threads"), so it's never a guess. The default is capped to
-however many cores this process can actually use -- `os.sched_getaffinity`
-plus a cgroup CPU quota check (Docker `--cpus`, Kubernetes limits, etc.),
-not just the host's total core count, since those can throttle a process to
-far fewer usable cores than `os.cpu_count()` reports. On a genuinely
-single-core machine, threading a CPU-bound hash can't produce any real
-speedup -- the default correctly collapses to 1 worker there, and pegging
-that one core near 100% while hashing is expected, not a bug.
+1. **Main thread** reads source files strictly sequentially -- one at a
+   time, in order, so a spinning source HDD is never hit with concurrent
+   reads of unrelated files (which would cause seek thrashing) -- and makes
+   every catalog/dedupe decision, keeping results identical to a fully
+   sequential run.
+2. **Hash workers** (default: up to 4, capped to the cores this process can
+   actually use) compute each file's SHA-256 from the in-memory bytes.
+3. **A single writer thread** writes each unique file to the destination
+   from those same in-memory bytes -- each source file is read exactly once
+   -- then re-reads the copy and runs the verification hash there, off the
+   main thread. One writer means the destination disk also sees strictly
+   sequential writes.
+
+Buffered file bytes are capped (~256MB) and files larger than 512MB are
+processed streamed instead of buffered, so memory stays bounded regardless
+of what's on the drive. Tune the pool with `--hash-workers N`;
+`--hash-workers 1` disables the pipeline entirely (fully sequential,
+nothing buffered). The worker count actually used is printed at the start
+of `copy`, so it's never a guess.
+
+The default worker count uses `os.sched_getaffinity` plus a cgroup CPU
+quota check (Docker `--cpus`, Kubernetes limits) rather than raw
+`os.cpu_count()`, which can overreport in containers/VMs. On a genuinely
+single-core machine parallelism can't help CPU-bound hashing, and the
+default correctly collapses to sequential mode there.
 
 ### Progress
 

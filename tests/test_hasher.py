@@ -59,11 +59,38 @@ def test_parallel_hashing_matches_sequential_results(tmp_path):
 
     assert snapshot(dest1, conn1) == snapshot(dest4, conn4)
 
-    files1 = sorted(p.relative_to(dest1).as_posix() for p in dest1.rglob("*") if p.is_file() and p.name != "catalog.db")
-    files4 = sorted(p.relative_to(dest4).as_posix() for p in dest4.rglob("*") if p.is_file() and p.name != "catalog.db")
+    files1 = sorted(p.relative_to(dest1).as_posix() for p in dest1.rglob("*") if p.is_file() and not p.name.startswith("catalog.db"))
+    files4 = sorted(p.relative_to(dest4).as_posix() for p in dest4.rglob("*") if p.is_file() and not p.name.startswith("catalog.db"))
     assert files1 == files4
     for rel in files1:
         assert (dest1 / rel).read_bytes() == (dest4 / rel).read_bytes()
+
+
+def test_write_verify_failure_marks_error_and_leaves_no_partial_files(tmp_path, monkeypatch):
+    # Force every verification re-hash to mismatch: both write attempts fail,
+    # files end as errors, and no .part or destination files are left behind.
+    monkeypatch.setattr(hasher, "sha256_file", lambda path: "bogus-hash-never-matches")
+    dest, conn = run_copy(tmp_path, "vfail", hash_workers=4)
+
+    counts = catalog.summary_counts(conn)
+    assert counts["error"]["count"] == 4
+    assert "unique" not in counts
+    leftovers = [p for p in dest.rglob("*") if p.is_file() and not p.name.startswith("catalog.db")]
+    assert leftovers == []
+    errors = conn.execute("SELECT error FROM files WHERE status='error'").fetchall()
+    assert all("verification failed" in r["error"] for r in errors)
+
+
+def test_tiny_memory_budget_still_produces_correct_results(tmp_path, monkeypatch):
+    # A 1-byte budget forces the pipeline to constantly stall and reap writes;
+    # results must be identical anyway.
+    monkeypatch.setattr(hasher, "PIPELINE_MEMORY_BUDGET", 1)
+    dest, conn = run_copy(tmp_path, "budget", hash_workers=4)
+
+    counts = catalog.summary_counts(conn)
+    assert counts["unique"]["count"] == 3
+    assert counts["duplicate"]["count"] == 1
+    assert (dest / "Users" / "John" / "Documents" / "a.bin").read_bytes() == b"alpha" * 10_000
 
 
 def test_large_file_falls_back_to_streamed_hash(tmp_path, monkeypatch):
