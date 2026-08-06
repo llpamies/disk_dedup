@@ -3,6 +3,28 @@ from pathlib import Path
 from dedup import catalog, hasher, scanner
 from dedup.rules import RuleSet
 
+
+def test_detect_cpu_count_respects_cgroup_v2_quota(monkeypatch):
+    def fake_read_text(self, *a, **kw):
+        if self == Path("/sys/fs/cgroup/cpu.max"):
+            return "100000 100000"  # quota == period -> effectively 1 core
+        raise FileNotFoundError
+
+    monkeypatch.setattr(Path, "read_text", fake_read_text)
+    monkeypatch.setattr(hasher.os, "sched_getaffinity", lambda pid: set(range(8)), raising=False)
+    assert hasher.detect_cpu_count() == 1
+
+
+def test_detect_cpu_count_unrestricted_quota_falls_back_to_affinity(monkeypatch):
+    def fake_read_text(self, *a, **kw):
+        if self == Path("/sys/fs/cgroup/cpu.max"):
+            return "max 100000"  # no quota set
+        raise FileNotFoundError
+
+    monkeypatch.setattr(Path, "read_text", fake_read_text)
+    monkeypatch.setattr(hasher.os, "sched_getaffinity", lambda pid: set(range(3)), raising=False)
+    assert hasher.detect_cpu_count() == 3
+
 DEFAULT_RULES = Path(__file__).resolve().parent.parent / "exclude_rules.txt"
 
 

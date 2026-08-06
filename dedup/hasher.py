@@ -35,7 +35,43 @@ CHUNK_SIZE = 1024 * 1024
 # huge file, and it keeps peak memory use bounded.
 PARALLEL_HASH_MAX_BYTES = 512 * 1024 * 1024
 
-DEFAULT_HASH_WORKERS = min(4, os.cpu_count() or 1)
+
+def _cgroup_cpu_quota() -> Optional[int]:
+    """Effective core count from a cgroup CPU quota, if any. Docker --cpus,
+    Kubernetes limits, etc. commonly throttle this way without narrowing
+    thread affinity, so plain os.cpu_count()/sched_getaffinity can overreport
+    how many cores are actually schedulable."""
+    try:  # cgroup v2
+        quota_s, period_s = Path("/sys/fs/cgroup/cpu.max").read_text().split()
+        if quota_s != "max":
+            return max(1, int(quota_s) // int(period_s))
+    except (OSError, ValueError, IndexError):
+        pass
+    try:  # cgroup v1
+        quota = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read_text())
+        period = int(Path("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read_text())
+        if quota > 0:
+            return max(1, quota // period)
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def detect_cpu_count() -> int:
+    """Best-effort count of cores actually usable by this process, not just
+    present on the host -- affinity masks and cgroup quotas (containers, VMs)
+    can both make the real number lower than os.cpu_count()."""
+    try:
+        n = len(os.sched_getaffinity(0))  # Linux only; respects taskset/cpuset limits
+    except AttributeError:
+        n = os.cpu_count() or 1
+    quota = _cgroup_cpu_quota()
+    if quota is not None:
+        n = min(n, quota)
+    return max(1, n)
+
+
+DEFAULT_HASH_WORKERS = min(4, detect_cpu_count())
 
 
 def sha256_file(path: Path) -> str:

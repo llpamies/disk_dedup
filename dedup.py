@@ -69,9 +69,11 @@ def cmd_copy(args: argparse.Namespace) -> int:
         print(f"error: drive {args.label!r} has not been scanned yet -- run 'scan' first.", file=sys.stderr)
         return 1
 
-    print(f"Copying unique files from drive {args.label!r} into {dest}...")
+    workers = max(1, args.hash_workers)
+    worker_note = "hashing on the main thread, no parallelism" if workers == 1 else f"{workers} hash worker threads"
+    print(f"Copying unique files from drive {args.label!r} into {dest} ({worker_note})...")
     hasher.copy_drive(
-        conn, drive_id, source, dest, show_progress=not args.quiet, hash_workers=args.hash_workers
+        conn, drive_id, source, dest, show_progress=not args.quiet, hash_workers=workers
     )
     report.print_drive_report(conn, args.label, phase="copy")
     return 0
