@@ -70,7 +70,9 @@ def cmd_copy(args: argparse.Namespace) -> int:
         return 1
 
     print(f"Copying unique files from drive {args.label!r} into {dest}...")
-    hasher.copy_drive(conn, drive_id, source, dest, show_progress=not args.quiet)
+    hasher.copy_drive(
+        conn, drive_id, source, dest, show_progress=not args.quiet, hash_workers=args.hash_workers
+    )
     report.print_drive_report(conn, args.label, phase="copy")
     return 0
 
@@ -119,6 +121,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_copy.add_argument("--label", required=True, help="Same --label used for 'scan'.")
     p_copy.add_argument("--dest", required=True, help="Destination collection folder.")
     p_copy.add_argument("--quiet", action="store_true", help="Suppress the live progress bar.")
+    p_copy.add_argument(
+        "--hash-workers",
+        type=int,
+        default=hasher.DEFAULT_HASH_WORKERS,
+        help=f"Threads used to compute file hashes in parallel (default: {hasher.DEFAULT_HASH_WORKERS} "
+        "on this machine). Disk reads and copying always stay sequential/single-threaded -- only "
+        "hashing is parallelized. Use 1 to disable.",
+    )
     p_copy.set_defaults(func=cmd_copy)
 
     p_report = sub.add_parser("report", help="Print scan/copy summary from the catalog.")

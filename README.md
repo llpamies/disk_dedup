@@ -56,6 +56,17 @@ python dedup.py report --dest /mnt/collection --list-duplicates > dupes.txt
 python dedup.py report --dest /mnt/collection --list-duplicates --drive HDD2
 ```
 
+### Parallel hashing
+
+If your source drive can deliver data faster than a single CPU core can run
+SHA-256 over it, hashing itself becomes the bottleneck rather than the disk.
+`copy` pipelines hash computation across a small thread pool (default: up to
+4 cores) while keeping disk reads strictly sequential in one thread -- only
+the CPU-bound hash step runs in parallel, so a spinning source HDD is never
+hit with concurrent reads of unrelated files (which would cause seek
+thrashing and likely make things slower, not faster). Tune it with
+`--hash-workers N`, or `--hash-workers 1` to fall back to fully sequential.
+
 ### Progress
 
 Both `scan` and `copy` print a live progress line to stderr while running.
